@@ -66,8 +66,8 @@ typedef struct XGameWindow {
                           // grayscale, or monochrome. There can be multiple
                           // screens for each display
     XVisualInfo x_visualinfo;
-    int width = 960;
-    int height = 540;
+    int width = 1920;
+    int height = 1080;
     int color_depth = 24; // 3 bytes for color and 8 bits hard coded for padding
     void *bitmap_memory;
     XImage *x_image;
@@ -342,6 +342,8 @@ internal void timer_sleep(long nanos_to_wait)
     } 
 }
 
+// TODO(jake): pass in the memory arena
+// and load the file into that
 DebugFileOpenReadResult DEBUGPlatformOpenReadEntireFile(ThreadContext *thread_context,
                                                         const char *file_name)
 {

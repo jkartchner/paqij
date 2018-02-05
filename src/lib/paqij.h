@@ -15,6 +15,12 @@
 #define Megabytes(x) (Kilobytes(x) * 1024)
 #define Gigabytes(x) (Megabytes((uint64_t)x) * 1024)
 
+typedef struct MemoryArena { // need a way to carve up Storage
+    uint8_t *base;
+    uint8_t *used;
+    uint32_t size;
+} MemoryArena;
+
 struct ThreadContext 
 {
     int Placeholder;
@@ -31,7 +37,7 @@ typedef struct GameMemory
 {
     bool is_initialized;
     void *permanent_storage;          // NOTE: REQUIRED to be cleared to 0 at startup
-    uint64_t permanent_storage_size;
+    uint32_t permanent_storage_size;
     void *transient_storage;
     uint64_t transient_storage_size; // NOTE: REQUIRED to be cleared to 0 at startup
     DebugFileOpenReadResult *DEBUG_File_Read;

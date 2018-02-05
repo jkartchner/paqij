@@ -20,6 +20,7 @@ typedef struct GameState {
     v2 offset;
     int sound_buff_offset;
     int tone_hz;
+    MemoryArena memory_arena;
     LoadedBitmap loaded_bitmap;
     LoadedBitmap loaded_pigeon_standing;
 }GameState;
@@ -212,7 +213,7 @@ GameOutputSound(ThreadContext *thread_context,
                 int tone_hz)
 {
     (void)thread_context;
-    GameGenerateWhiteNoise(frames_to_output, sound_buffer);
+    GameGenerateSilence(frames_to_output, sound_buffer);
     return 0;
 }
 
@@ -351,8 +352,12 @@ void UpdateAndRender(ThreadContext *thread_context,
         // TODO(jake): get rid of mem leak here; need to dispose of bitmap file in mem
         game_state->loaded_pigeon_standing = LoadBMP(thread_context, file_to_read2);
         game_state->tone_hz = 50;
-        game_state->offset.x = 0;
-        game_state->offset.y = 0;
+        game_state->offset = { 0, 0 }; // topleft of the screen
+        game_state->memory_arena.base = (uint8_t *)game_state + sizeof(game_state), 
+        game_state->memory_arena.used = (uint8_t *)game_state + sizeof(game_state),
+        game_state->memory_arena.size = game_memory->permanent_storage_size - 
+                                                         sizeof(game_state); 
+        debug("Size of per memory arena: %lld", (long long)game_memory->permanent_storage_size);
         game_memory->is_initialized = 1;
     }
 
