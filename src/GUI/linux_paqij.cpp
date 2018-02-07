@@ -66,8 +66,8 @@ typedef struct XGameWindow {
                           // grayscale, or monochrome. There can be multiple
                           // screens for each display
     XVisualInfo x_visualinfo;
-    int width = 1920;
-    int height = 1080;
+    int width = 960;
+    int height = 540;
     int color_depth = 24; // 3 bytes for color and 8 bits hard coded for padding
     void *bitmap_memory;
     XImage *x_image;
@@ -108,8 +108,9 @@ typedef struct ALSAObject {
 
 	unsigned int rate 	 = 44100;
 	int channels             = 2;
-    int expected_frames_to_output;
     int bytes_per_sample = 2;
+    int expected_frames_to_output;
+    int sound_output_last_frame = 0;
 } ALSAObject;
 
 
@@ -279,12 +280,18 @@ PlaySoundFrames(int frames_to_output)
                             alsa_object.buff_ptr, 
                             frames_to_output);
     if(frames == -11)
+    {
         debug("buffer overrun!");
+        return 0;
+    }
     if(frames == -32)
     {   // simplest recovery 
         frames = snd_pcm_recover(alsa_object.handle, frames, 0); 
-        check_debug(frames > 0, "sound write failed: %d: %s", 
-                frames, snd_strerror(frames));
+        if(frames < 0)
+        {
+            debug("Sound write failed: %d: %s", frames, snd_strerror(frames));
+            return 0;
+        }
     }
     return frames;
 }
@@ -345,12 +352,13 @@ internal void timer_sleep(long nanos_to_wait)
 // TODO(jake): pass in the memory arena
 // and load the file into that
 DebugFileOpenReadResult DEBUGPlatformOpenReadEntireFile(ThreadContext *thread_context,
-                                                        const char *file_name)
+                              uint8_t *memory, int32_t max_size, const char *file_name)
 {
     (void)thread_context;
     struct stat st;
     stat(file_name, &st);
-    void *file_contents = malloc(st.st_size);
+    Assert(max_size > st.st_size);
+    void *file_contents = (void *)memory;//malloc(st.st_size);
     check_mem(file_contents);
 
     DebugFileOpenReadResult result = {};
@@ -478,19 +486,22 @@ int main(void)
             frames_to_output = PollSoundCard(); 
                
             // artifacts w/o extra frames
-            // When playing audio, will need to somehow also pass along any 
-            // frames that were NOT sent to the sound card (the write return value)
             // Consider pulling sound generation out of the game loop and calling
             // directly by the platform layer so we don't have to preserve values
             // through the game loop and the poll. We can poll and deal with the 
             // result immediately
-            frames_to_output = frames_to_output > 0 ? frames_to_output + 800 : 0;
+            frames_to_output = frames_to_output > 0 ? frames_to_output + 9000 : 0;
+            if(frames_to_output > 10000)
+            {
+                frames_to_output = 10000; 
+            }
             UpdateAndRender(&thread_context, &game_memory, &game_buffer, 
                     frames_to_output, alsa_object.buff, 
+                    alsa_object.sound_output_last_frame, 
                     &keyboard_input, &last_frame_keyboard_input);
             last_frame_keyboard_input = keyboard_input;
 
-            PlaySoundFrames(frames_to_output); 
+            alsa_object.sound_output_last_frame = PlaySoundFrames(frames_to_output); 
 
             // timer goes here to hold page flip to end of frame/begin of next
             double elapsed_time = timer_end(g_time_since_last_frame) / 1000000000; 
@@ -498,7 +509,8 @@ int main(void)
                 while(elapsed_time < target_seconds_elapsed_per_frame) {
                     timer_sleep((long)(target_seconds_elapsed_per_frame * 
                             1000000000) - timer_end(g_time_since_last_frame)); 
-                    elapsed_time = (double)timer_end(g_time_since_last_frame) / 1000000000;
+                    elapsed_time = (double)timer_end(g_time_since_last_frame) / 
+                        1000000000;
                 }
             } else {
                 // TODO(jake): Missed frame rate!!

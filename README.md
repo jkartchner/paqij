@@ -18,6 +18,7 @@ Here's what you can do to get it running:
 3. Type 'make dev' for an optimized version of the engine. Typing 'make' alone produces a debug version that will give you more info about application behavior.
 4. Type 'make install.' If that doesn't work, copy the binary produced (found in the src/GUI/ folder) into your app path (e.g., usr/local/bin). You could also not do that and just run it wherever you copy the binary file.
 5. Run paqij by typing ./linux_paqij in the folder and it will give you specifics on command line options.
+6. If the code still has hard coded paths (still in development), you'll need to change those hard coded paths to the paths to the assets in the data folder. Then recompile.
 
 I didn't write any unit tests yet. Usually not useful for a video game anyway, though I may use it for the questions put into the actual game.
 

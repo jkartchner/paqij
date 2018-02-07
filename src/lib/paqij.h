@@ -16,8 +16,8 @@
 #define Gigabytes(x) (Megabytes((uint64_t)x) * 1024)
 
 typedef struct MemoryArena { // need a way to carve up Storage
-    uint8_t *base;
-    uint8_t *used;
+    uint32_t *base;
+    uint32_t *used;
     uint32_t size;
 } MemoryArena;
 
@@ -29,7 +29,7 @@ struct ThreadContext
 typedef struct DebugFileOpenReadResult 
 {
     void *file_contents;
-    uint64_t file_size;
+    uint32_t file_size;
 
 } DebugFileOpenReadResult;
 
@@ -60,6 +60,12 @@ typedef struct LoadedBitmap {
 
 } LoadedBitmap;
 
+typedef struct LoadedWave {
+    uint32_t data_size;
+    uint16_t *pcm_ptr;
+    uint16_t *pcm_data;
+} LoadedWave;
+
 typedef struct GameControllerInput { 
     int32_t mouse_buttons[5];
     int32_t mouse_x, mouse_y; // mouse position
@@ -85,13 +91,16 @@ void UpdateAndRender(ThreadContext *thread_context,
                      GameMemory *game_memory, 
                      GameScreenBuffer *game_buffer, 
                      int frames_to_output, void *sound_buffer, 
+                     int sound_output_last_frame,
                      GameControllerInput *keyboard_input, 
                      GameControllerInput *last_frame_keyboard_input);
 
 
 DebugFileOpenReadResult DEBUGPlatformOpenReadEntireFile(
-                     ThreadContext *thread_context, 
-                     const char *file_name);
+                    ThreadContext *thread_context, 
+                    uint8_t *memory, 
+                    int32_t max_size, 
+                    const char *file_name);
 
 int DEBUGPlatformOpenWriteEntireFile(ThreadContext *thread_context, 
                      const char *file_name, 
@@ -99,6 +108,7 @@ int DEBUGPlatformOpenWriteEntireFile(ThreadContext *thread_context,
                      void *file_contents);
 
 int DEBUGPlatformFreeMemory(ThreadContext *thread_context, void *memory);
+
 
 
 #endif

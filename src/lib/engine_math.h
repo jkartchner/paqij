@@ -105,6 +105,36 @@ inline v2 V2(float X, float Y) // this is annoying; b/c of the union,
     return result;
 }
 
+typedef struct Color {
+    float red;
+    float green;
+    float blue;
+    float alpha;
+} Color;
+
+internal uint32_t
+RoundFloatToInt32(float Float)
+{
+    int32_t result = (int32_t)(Float + 0.5f);
+    return result;
+}
+
+internal uint32_t
+GetColorInt(Color color)
+{
+    unsigned char red = RoundFloatToInt32(color.red * 255);
+    unsigned char green = RoundFloatToInt32(color.green * 255);
+    unsigned char blue = RoundFloatToInt32(color.blue * 255);
+    unsigned char alpha = RoundFloatToInt32(color.alpha * 255);
+    return alpha << 24 | red << 16 | green << 8 | blue;
+}
+
+internal Color
+GetColor(float a, float r, float g, float b)
+{
+    Color color = { a, r, g, b }; 
+    return color;
+}
 
 /* EQUATIONS OF MOTION ------------------------------------------------
  * 

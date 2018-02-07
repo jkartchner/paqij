@@ -1,28 +1,33 @@
 #include "paqij.h"
 #include "engine_math.h"
 
-
+/***************************************************************
+ * Ideas:
+ *      S02E02: zoom into eye, kinai tancol lock, almodik arrol
+ *      reszt vesz a csoportban - legyen ugy a galamb a 
+ *      keksszel.
+ *      S02??: Western - eagle cry, using other for cover
+ */
 
 internal uint32_t RoundFloatToInt32(float Float);
 
 #define M_PI 3.1415926535f
-#define White       { 1.0f, 1.0f, 1.0f, 1.0f }
-#define Black       { 0.0f, 0.0f, 0.0f, 1.0f }
-#define Red         { 1.0f, 0.0f, 0.0f, 1.0f }
-#define Green       { 0.0f, 1.0f, 0.0f, 1.0f }
-#define Blue        { 0.0f, 0.0f, 1.0f, 1.0f }
-#define Yellow      { 1.0f, 1.0f, 0.0f, 1.0f }
-#define Orange      { 1.0f, 0.65f, 0.0f, 1.0f }
-#define Purple      { 0.5f, 0.0f, 0.5f, 1.0f }
-
+#define White        1.0f, 1.0f, 1.0f, 1.0f 
+#define Black        0.0f, 0.0f, 0.0f, 1.0f 
+#define Red          1.0f, 0.0f, 0.0f, 1.0f 
+#define Green        0.0f, 1.0f, 0.0f, 1.0f 
+#define Blue         0.0f, 0.0f, 1.0f, 1.0f 
+#define Yellow       1.0f, 1.0f, 0.0f, 1.0f 
+#define Orange       1.0f, 0.65f, 0.0f, 1.0f 
+#define Purple       0.5f, 0.0f, 0.5f, 1.0f 
 
 typedef struct GameState {
     v2 offset;
     int sound_buff_offset;
     int tone_hz;
     MemoryArena memory_arena;
-    LoadedBitmap loaded_bitmap;
     LoadedBitmap loaded_pigeon_standing;
+    LoadedWave loaded_test_wave;
 }GameState;
 
 struct Question {
@@ -34,10 +39,10 @@ struct Question {
 
 #pragma pack( push, 1 )
 typedef struct BMPHeader {
-    uint16_t type;        // chars "BM"
-    uint32_t file_size;        // size of file in bytes
-    uint16_t reserved1;   // unused
-    uint16_t reserved2;   // unused
+    uint16_t type;          // chars "BM"
+    uint32_t file_size;     // size of file in bytes
+    uint16_t reserved1;     // unused
+    uint16_t reserved2;     // unused
     uint32_t data_offset;   // offset to start of pixel 
     uint32_t header_size; 	//	Header Size - Must be at least 40
     uint32_t width; 	    //	Image width in pixels
@@ -51,30 +56,53 @@ typedef struct BMPHeader {
     uint32_t color_maps_used;  	//	Number Color Map entries that are actually used
     uint32_t colors;     	//	Number of significant colors
 } BMPHeader;
+
+typedef struct WAVEHeader {
+    uint32_t chars_RIFF;   // R I F F
+    uint32_t adjusted_file_size; // this is the file size - 8
+    uint32_t chars_WAVE;   // W A V E
+    // Following is subchunk1 of the format; usually a sep struct in robust implem
+    uint32_t chars_fmt_;   // f m t space
+    uint32_t data_length;  // this is usually 16
+    uint16_t data_type;    // 1 is PCM
+    uint16_t channels;     // total channels
+    uint32_t sample_rate;  // 44100 per second
+    uint32_t bytes_per_second; // (sample rate * bits per channel * channels) / 8 (176400)
+    uint16_t frame_rate;   // (bits per sample * channels) / 8 - spec callsit"block align"
+    uint16_t bits_per_sample; // 16
+    // Following is subchunk2  of format; usually a sep struct in robust implementations
+    uint32_t chars_DATA;   // D A T A
+    uint32_t data_size;    // total size of the pcm data in bytes
+    // the PCM data starts after the data_size
+} WAVEHeader;
 #pragma pack(pop)
 
-typedef struct Color {
-    float red;
-    float green;
-    float blue;
-    float alpha;
-} Color;
 
-
-internal uint32_t
-GetColorInt(Color color)
+internal LoadedWave
+LoadWAVE(ThreadContext *thread_context, MemoryArena *memory_arena, char *file_name)
 {
-    unsigned char red = RoundFloatToInt32(color.red * 255);
-    unsigned char green = RoundFloatToInt32(color.green * 255);
-    unsigned char blue = RoundFloatToInt32(color.blue * 255);
-    unsigned char alpha = RoundFloatToInt32(color.alpha * 255);
-    return alpha << 24 | red << 16 | green << 8 | blue;
-}
-
-internal uint32_t
-RoundFloatToInt32(float Float)
-{
-    int32_t result = (int32_t)(Float + 0.5f);
+    (void)thread_context;
+    DebugFileOpenReadResult read_result = DEBUGPlatformOpenReadEntireFile(thread_context, 
+                           (uint8_t *)memory_arena->used, 
+                           (uint32_t)((memory_arena->base + memory_arena->size)
+                               - memory_arena->used), 
+                           file_name);
+    LoadedWave result = {};
+    if(read_result.file_size > 0)
+    {
+        memory_arena->used = (uint32_t *)(memory_arena->used + read_result.file_size);
+        WAVEHeader *wave_header = (WAVEHeader *)read_result.file_contents;
+        uint16_t *pcm_data = (uint16_t *)((uint8_t *)&wave_header->data_size + 4);
+        // above: we first cast to byte pointer so we can add the header in bytes to that
+        result.pcm_data = pcm_data;
+        result.pcm_ptr = pcm_data;
+        result.data_size = wave_header->data_size;
+        
+        debug("Sample rate %d", wave_header->sample_rate);
+        // NOTE(jake): If you are using this generically for some reason,
+        // there can be compression, etc., etc... DON'T think this is 
+        // a complete WAVE loading code because it isn't!
+    }
     return result;
 }
 
@@ -118,13 +146,17 @@ DrawRectangle(GameScreenBuffer *screen_buffer, v2 offset, v2 max, Color color)
 /// TODO(jake): make this implementation more robust and able to handle shifted byte 
 /// orders. See day 38 in handmade hero for good example of this.
 internal LoadedBitmap
-LoadBMP(ThreadContext *thread_context, char *file_name)
+LoadBMP(ThreadContext *thread_context, MemoryArena *memory_arena, char *file_name)
 {
     DebugFileOpenReadResult read_result = DEBUGPlatformOpenReadEntireFile(thread_context, 
-                                                    file_name);
+                           (uint8_t *)memory_arena->used, 
+                           (uint32_t)((memory_arena->base + memory_arena->size)
+                               - memory_arena->used), 
+                           file_name);
     LoadedBitmap result = {};
     if(read_result.file_size > 0)
     {
+        memory_arena->used = (uint32_t *)(memory_arena->used + read_result.file_size);
         BMPHeader *bmp_header = (BMPHeader *)read_result.file_contents; // can cold cast
         // IMPORTANT: rows must end on 4 byte boundary; no problem here since pixel = 4 b
         uint32_t *pixels = (uint32_t *)
@@ -206,14 +238,64 @@ GameGenerateSilence(int frames_to_output, void *sound_buffer)
     
     return 0;
 }
+
 internal int
 GameOutputSound(ThreadContext *thread_context, 
                 int frames_to_output, 
+                int sound_output_last_frame,
                 void *sound_buffer, 
-                int tone_hz)
+                LoadedWave *loaded_wave)
 {
     (void)thread_context;
-    GameGenerateSilence(frames_to_output, sound_buffer);
+    uint16_t *sound_data_end = (uint16_t *)((uint8_t *)loaded_wave->pcm_data + 
+                                                    loaded_wave->data_size);
+    uint16_t *data_projected_end = (uint16_t *)
+                                   ((uint8_t *)loaded_wave->pcm_ptr + 
+                                    (sound_output_last_frame * 4));
+
+    int adjusted_frames_to_output = 0;
+    bool will_overrun = false;
+
+    if(sound_data_end > data_projected_end)
+    {
+        // sound_output_last_frame * 2 b/c we have two channels of bytes to advance
+        loaded_wave->pcm_ptr = data_projected_end;
+    }
+    else 
+    {
+        loaded_wave->pcm_ptr = loaded_wave->pcm_data + 
+            (data_projected_end - sound_data_end);
+    }
+
+    // this definition must come here, after the pcm_ptr has been moved
+    uint16_t *output_projected_end = (uint16_t *)
+                                   ((uint8_t *)loaded_wave->pcm_ptr + 
+                                   (frames_to_output * 4));
+    if(sound_data_end > output_projected_end)
+    {
+        adjusted_frames_to_output = frames_to_output;
+    }
+    else
+    {
+        adjusted_frames_to_output = (sound_data_end - loaded_wave->pcm_ptr);
+        will_overrun = true;
+    }
+
+    uint16_t *temp_buff = (uint16_t *)sound_buffer;
+    for(int l1 = 0; l1 < adjusted_frames_to_output; l1 += 2) 
+    { 
+        temp_buff[l1] = loaded_wave->pcm_ptr[l1];           // left channel
+        temp_buff[l1 + 1] = loaded_wave->pcm_ptr[l1 + 1];   // right channel
+    }
+    if(will_overrun)
+    {
+        int adjusted2 = frames_to_output - adjusted_frames_to_output;
+        for(int l1 = 0; l1 < adjusted2; l1 += 2) 
+        { 
+            temp_buff[l1 + adjusted_frames_to_output] = loaded_wave->pcm_data[l1]; 
+            temp_buff[l1 + 1 + adjusted_frames_to_output] = loaded_wave->pcm_data[l1 + 1];
+        }
+    }
     return 0;
 }
 
@@ -339,7 +421,8 @@ void UpdateAndRender(ThreadContext *thread_context,
                     GameMemory *game_memory,
                     GameScreenBuffer *screen_buffer, 
                     int frames_to_output, 
-                    void *sound_buffer, 
+                    void *sound_buffer,
+                    int frames_sent_last_frame, 
                     GameControllerInput *keyboard_input, 
                     GameControllerInput *last_frame_keyboard_input)
 {
@@ -349,37 +432,41 @@ void UpdateAndRender(ThreadContext *thread_context,
     if(!game_memory->is_initialized)
     {
         char file_to_read2[] = "/home/jake/Projects/paqij/data/pigeon-standing.bmp";
-        // TODO(jake): get rid of mem leak here; need to dispose of bitmap file in mem
-        game_state->loaded_pigeon_standing = LoadBMP(thread_context, file_to_read2);
+        char file_to_read3[] = "/home/jake/Projects/paqij/data/test.wav";
         game_state->tone_hz = 50;
         game_state->offset = { 0, 0 }; // topleft of the screen
-        game_state->memory_arena.base = (uint8_t *)game_state + sizeof(game_state), 
-        game_state->memory_arena.used = (uint8_t *)game_state + sizeof(game_state),
+        game_state->memory_arena.base = (uint32_t *)game_state + sizeof(game_state), 
+        game_state->memory_arena.used = (uint32_t *)game_state + sizeof(game_state),
         game_state->memory_arena.size = game_memory->permanent_storage_size - 
                                                          sizeof(game_state); 
-        debug("Size of per memory arena: %lld", (long long)game_memory->permanent_storage_size);
+        game_state->loaded_pigeon_standing = LoadBMP(thread_context, 
+                &game_state->memory_arena, file_to_read2);
+        
+        game_state->loaded_test_wave = LoadWAVE(thread_context, 
+                &game_state->memory_arena, file_to_read3);
         game_memory->is_initialized = 1;
     }
 
     ProcessPlayerInput(keyboard_input, last_frame_keyboard_input, game_state);
 
-    Color mouse_pointer_color = Orange;
-    Color clear_screen_color = White; // RGBA
-
     DrawRectangle(screen_buffer, V2(0.0f, 0.0f), 
                  V2((float)screen_buffer->width, 
                  (float)screen_buffer->height), 
-                 clear_screen_color);
+                 GetColor(White));
 
     DrawRectangle(screen_buffer, 
                   V2((float)keyboard_input->mouse_x - 5.0f, 
                   (float)keyboard_input->mouse_y - 5.0f), 
-                  V2(10.f, 10.0f), mouse_pointer_color); 
+                  V2(10.f, 10.0f), GetColor(Blue)); 
 
     DrawBitmap(screen_buffer, 
                &game_state->loaded_pigeon_standing, 
                game_state->offset);
 
-    GameOutputSound(thread_context, frames_to_output, sound_buffer, game_state->tone_hz);
+    GameOutputSound(thread_context, 
+            frames_to_output, 
+            frames_sent_last_frame,
+            sound_buffer, 
+            &game_state->loaded_test_wave);
 
 }
